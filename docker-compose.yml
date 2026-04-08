@@ -1,0 +1,46 @@
+# ─── Affordable Mobile Mechanics — Docker Compose ────────────────────────────
+# Usage:
+#   docker compose up -d          # start in background
+#   docker compose logs -f        # tail logs
+#   docker compose down           # stop (data volume persists)
+#   docker compose down -v        # stop AND delete the database volume (DANGER)
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: affordable-mobile-mechanics:latest
+    container_name: amm-app
+    restart: unless-stopped
+    ports:
+      # Map host port 3000 → container port 5000.
+      # Change the left side to any available host port (e.g. "80:5000" for direct
+      # HTTP, or keep "3000:5000" and put nginx/Caddy in front for HTTPS).
+      - "3000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      # Uncomment and fill in optional integrations:
+      # TWILIO_ACCOUNT_SID: ""
+      # TWILIO_AUTH_TOKEN: ""
+      # TWILIO_FROM_NUMBER: ""
+      # ZOHO_MAIL_TOKEN: ""
+      # ZOHO_MAIL_FROM: ""
+      # ZOHO_CRM_TOKEN: ""
+      # ZOHO_BOOKS_TOKEN: ""
+    volumes:
+      # Persist the SQLite database file on the host.
+      # The app writes "data.db" relative to /app (the working directory).
+      # This bind-mount keeps it on the host so it survives container rebuilds.
+      - amm-data:/app/data-volume
+      # Alternative: bind-mount a host directory directly:
+      # - ./db:/app/db-volume
+    # If you applied the DATABASE_PATH patch (see DEPLOYMENT.md), change the
+    # volume target above to match and uncomment:
+    # environment:
+    #   DATABASE_PATH: /app/data-volume/data.db
+
+volumes:
+  amm-data:
+    driver: local
