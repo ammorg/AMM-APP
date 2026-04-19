@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { mutationErrorToast } from "@/lib/errorMessages";
@@ -14,9 +14,48 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Briefcase, Search, MapPin, Phone, ClipboardList, Camera, CheckCircle2, AlertCircle, ExternalLink, Pencil } from "lucide-react";
+import { Plus, Briefcase, Search, MapPin, Phone, ClipboardList, Camera, CheckCircle2, AlertCircle, ExternalLink, Pencil, BellRing } from "lucide-react";
 
 const DEFAULT_JOB_FORM_URL = "https://forms.zohopublic.com/ServiceHub/form/AffordableMobileMechanics/formperma/QNsesdJiRj8kQBw-pYohiFlVDKlbQOVCzjXdBOab1f8";
+const JOB_OFFER_WINDOW_SECONDS = 300;
+
+function getOfferTimeLeft(job: Job) {
+  if (job.assignedStaffId) return 0;
+  const createdAtMs = job.createdAt ? new Date(job.createdAt).getTime() : Date.now();
+  const expiresAtMs = createdAtMs + JOB_OFFER_WINDOW_SECONDS * 1000;
+  return Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
+}
+
+async function playOfferAlert() {
+  if (typeof window === "undefined") return;
+
+  try {
+    const audio = new Audio("/alert.mp3");
+    audio.volume = 1;
+    await audio.play();
+    return;
+  } catch {}
+
+  try {
+    const BrowserAudioContext = window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!BrowserAudioContext) return;
+
+    const context = new BrowserAudioContext();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.value = 880;
+    gain.gain.value = 0.08;
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.22);
+    oscillator.onended = () => { void context.close(); };
+  } catch {}
+}
 
 interface OpenJob extends Job {
   customerPreview: { id: number; name: string; city: string | null; phone: string | null; email: string | null; address: string | null } | null;
@@ -183,7 +222,7 @@ function AcceptJobButton({ jobId }: { jobId: number }) {
     },
     onError: (err) => toast({ ...mutationErrorToast(err, "accept job"), variant: "destructive" }),
   });
-  return <Button size="sm" className="text-xs h-7" onClick={() => mutation.mutate()} disabled={mutation.isPending}>{mutation.isPending ? "Accepting..." : "Accept Job"}</Button>;
+  return <Button size="sm" className="text-xs h-9 px-4 font-semibold" onClick={() => mutation.mutate()} disabled={mutation.isPending}>{mutation.isPending ? "Accepting..." : "Accept Job"}</Button>;
 }
 
 function FormButton({ formUrl }: { formUrl: string }) {
@@ -264,6 +303,8 @@ export default function Jobs() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
+  const [offerTimeLeft, setOfferTimeLeft] = useState<Record<number, number>>({});
+  const alertedOfferIdsRef = useRef<Set<number>>(new Set());
 
   const allJobs = useMemo(() => {
     if (isAdmin()) return assignedJobs.map(job => ({ job, openMeta: null as OpenJob | null }));
@@ -290,6 +331,38 @@ export default function Jobs() {
     },
   });
   const completionMap = completionQueries.data ?? {};
+
+  useEffect(() => {
+    if (isAdmin()) return;
+
+    const tick = () => {
+      const next: Record<number, number> = {};
+      openJobs.forEach((job) => {
+        next[job.id] = getOfferTimeLeft(job);
+      });
+      setOfferTimeLeft(next);
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [openJobs, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin()) return;
+
+    const openOfferIds = new Set(openJobs.filter((job) => !job.assignedStaffId).map((job) => job.id));
+    alertedOfferIdsRef.current.forEach((id) => {
+      if (!openOfferIds.has(id)) alertedOfferIdsRef.current.delete(id);
+    });
+
+    const newOffers = openJobs.filter((job) => !job.assignedStaffId && !alertedOfferIdsRef.current.has(job.id));
+    if (newOffers.length === 0) return;
+
+    void playOfferAlert();
+    navigator.vibrate?.([300, 100, 300]);
+    newOffers.forEach((job) => alertedOfferIdsRef.current.add(job.id));
+  }, [openJobs, isAdmin]);
 
   const filtered = allJobs.filter(({ job, openMeta }) => {
     const customer = customers.find(c => c.id === job.customerId);
@@ -342,15 +415,17 @@ export default function Jobs() {
                 const exactAddress = canSeePrivate ? (job.address || [customer?.address, customer?.city].filter(Boolean).join(", ")) : null;
                 const vehicleLabel = vehicle ? `${vehicle.year} ${vehicle.make} ${vehicle.model}` : openMeta?.vehiclePreview ? `${openMeta.vehiclePreview.year} ${openMeta.vehiclePreview.make} ${openMeta.vehiclePreview.model}` : null;
                 const isOpenForAcceptance = !isAdmin() && !job.assignedStaffId;
+                const timeLeft = isOpenForAcceptance ? (offerTimeLeft[job.id] ?? getOfferTimeLeft(job)) : 0;
+                const isExpiringSoon = isOpenForAcceptance && timeLeft <= 60;
 
                 return (
-                  <div key={job.id} className="px-4 py-3 flex flex-wrap items-start gap-3">
+                  <div key={job.id} className={`px-4 py-3 flex flex-wrap items-start gap-3 ${isOpenForAcceptance ? "border-l-4 border-red-500 bg-red-50/60 dark:bg-red-950/10 animate-pulse" : ""}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm">{job.serviceType}</span>
                         <Badge variant={statusVariant(job.status)} className="text-xs">{statusLabel(job.status)}</Badge>
                         <Badge variant={priorityVariant(job.priority)} className="text-xs capitalize">{job.priority}</Badge>
-                        {isOpenForAcceptance && <Badge variant="outline" className="text-xs">Open to accept</Badge>}
+                        {isOpenForAcceptance && <Badge variant="outline" className="text-xs border-red-500 text-red-600 dark:text-red-400">🚨 New offer</Badge>}
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
                         <span>{customerName}</span>
@@ -360,6 +435,12 @@ export default function Jobs() {
                         {job.scheduledAt && <span>📅 {fmtDateTime(job.scheduledAt)}</span>}
                         {job.estimateAmount != null && <span>Est. {fmtCurrency(job.estimateAmount)}</span>}
                       </div>
+                      {isOpenForAcceptance && (
+                        <div className={`mt-2 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs font-semibold ${isExpiringSoon ? "border-red-500 text-red-600 dark:text-red-400 bg-white/80 dark:bg-black/20" : "border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20"}`}>
+                          <BellRing size={12} />
+                          <span>{timeLeft > 0 ? `⏳ ${timeLeft}s to accept` : "Offer aging — accept ASAP"}</span>
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-3 mt-1.5 items-center">
                         {customerPhone && <a href={`tel:${customerPhone}`} className="flex items-center gap-1 text-xs text-primary hover:underline"><Phone size={11} /> {customerPhone}</a>}
                         {exactAddress ? (
@@ -373,7 +454,10 @@ export default function Jobs() {
                       {completion?.vehiclePhotos && JSON.parse(completion.vehiclePhotos).length > 0 && <div className="flex items-center gap-1 mt-2 text-[11px] text-muted-foreground"><CheckCircle2 size={11} /> {JSON.parse(completion.vehiclePhotos).length} photo(s) uploaded</div>}
                     </div>
                     <div className="flex items-start gap-1 flex-wrap flex-col sm:flex-row">
-                      {isOpenForAcceptance ? <AcceptJobButton jobId={job.id} /> : <>
+                      {isOpenForAcceptance ? <>
+                        <div className="text-[11px] text-red-600 dark:text-red-400 font-medium">Sound + vibration fire when a new offer appears.</div>
+                        <AcceptJobButton jobId={job.id} />
+                      </> : <>
                         <FormButton formUrl={formUrl} />
                         <VehiclePhotosPanel jobId={job.id} completion={completion} />
                         <UpdateStatusDialog job={job} />
