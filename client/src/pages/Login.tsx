@@ -5,23 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ChevronDown, ChevronUp, LogIn, Hash } from "lucide-react";
+import { LogIn, Hash } from "lucide-react";
 import { apiRequest, ApiError } from "@/lib/queryClient";
 import ammLogo from "@assets/amm-logo-primary.jpeg";
 import aseBadge from "@assets/amm-ase-badge.jpeg";
 
-const DEMO_ACCOUNTS = [
-  { username: "admin", password: "admin1234", role: "Admin / Owner", desc: "Full access — all routes, finance, settings, team", pin: null },
-  { username: "devon", password: "devon1234", role: "Lead Mechanic", desc: "Assigned jobs, customers, estimator", pin: "1492" },
-  { username: "janelle", password: "janelle1234", role: "Mechanic", desc: "Own assigned jobs and related customers", pin: "2837" },
-  { username: "remy", password: "remy1234", role: "Mechanic", desc: "Own assigned jobs and related customers", pin: "5501" },
-];
-
-function roleBadgeClass(role: string) {
-  if (role.includes("Admin")) return "bg-primary/10 text-primary border-primary/20";
-  if (role.includes("Lead")) return "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400 border-orange-200 dark:border-orange-900";
-  return "bg-secondary text-secondary-foreground border-border";
-}
 
 export default function Login() {
   const { login } = useAuth();
@@ -31,7 +19,6 @@ export default function Login() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [demoOpen, setDemoOpen] = useState(false);
 
   async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -87,17 +74,6 @@ export default function Login() {
     setError("");
   }
 
-  function fillDemo(acc: typeof DEMO_ACCOUNTS[0]) {
-    if (tab === "pin" && acc.pin) {
-      setPin(acc.pin);
-      setError("");
-    } else {
-      setTab("password");
-      setUsername(acc.username);
-      setPassword(acc.password);
-      setError("");
-    }
-  }
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col lg:flex-row">
@@ -288,47 +264,6 @@ export default function Login() {
             </Card>
           )}
 
-          {/* Demo credentials panel */}
-          <Card className="border-border/60 bg-muted/30">
-            <button
-              type="button"
-              className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setDemoOpen(o => !o)}
-              data-testid="btn-demo-panel"
-            >
-              <span>Demo accounts</span>
-              {demoOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-            </button>
-
-            {demoOpen && (
-              <div className="px-4 pb-4 space-y-2 border-t border-border/40 pt-3">
-                <p className="text-xs text-muted-foreground mb-3">
-                  Click any account to prefill credentials.
-                </p>
-                {DEMO_ACCOUNTS.map(acc => (
-                  <button
-                    key={acc.username}
-                    type="button"
-                    onClick={() => fillDemo(acc)}
-                    className="w-full text-left rounded-lg border border-border/60 bg-background hover:border-primary/40 hover:bg-primary/5 transition-colors p-3 space-y-1"
-                    data-testid={`demo-account-${acc.username}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-mono font-semibold text-foreground">{acc.username}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${roleBadgeClass(acc.role)}`}>
-                        {acc.role}
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">{acc.desc}</div>
-                    <div className="flex gap-3 text-xs font-mono text-muted-foreground/70">
-                      {acc.pin && <span>PIN: <span className="text-primary font-semibold">{acc.pin}</span></span>}
-                      <span>pw: {acc.password}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </Card>
         </div>
       </div>
     </div>
