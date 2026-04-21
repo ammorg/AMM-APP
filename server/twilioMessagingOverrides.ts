@@ -1,4 +1,5 @@
 import type { Express, Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { storage } from "./storage";
 
@@ -132,8 +133,16 @@ function syncIntegrationStatuses() {
 export function registerTwilioMessagingOverrides(app: Express) {
   app.use(authMiddleware);
 
+  const pinLoginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many PIN login attempts. Please try again later." },
+  });
+
   const pinLoginSchema = z.object({ pin: z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits") });
-  app.post("/api/auth/pin-login", (req, res) => {
+  app.post("/api/auth/pin-login", pinLoginLimiter, (req, res) => {
     const parsed = pinLoginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid PIN" });
     const safeUser = storage.verifyPinLogin(parsed.data.pin);
