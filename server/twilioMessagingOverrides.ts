@@ -1,38 +1,19 @@
 import type { Express, Request, Response, NextFunction } from "express";
-import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { storage } from "./storage";
 
 const SESSION_COOKIE = "amm_session";
-const SESSION_MAX_AGE = 7 * 24 * 3600;
 
 function getSessionId(req: Request): string | undefined {
   const rawHeader = req.headers.cookie;
-  const cookieHeader = Array.isArray(rawHeader) ? rawHeader.join("; ") : (rawHeader || "");
+  const cookieHeader = Array.isArray(rawHeader) ? rawHeader.join("; ") : rawHeader || "";
   const cookies = Object.fromEntries(
-    cookieHeader.split(";").filter(Boolean).map(c => {
+    cookieHeader.split(";").filter(Boolean).map((c) => {
       const [k, ...v] = c.trim().split("=");
       return [k, decodeURIComponent(v.join("="))];
     }),
   );
   return cookies[SESSION_COOKIE];
-}
-
-function isSecureRequest(req: Request): boolean {
-  const proto = req.headers["x-forwarded-proto"];
-  const forwardedProto = Array.isArray(proto) ? proto[0] : proto;
-  return req.secure || forwardedProto === "https";
-}
-
-function sessionCookieAttributes(req: Request): string {
-  if (isSecureRequest(req)) {
-    return `Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${SESSION_MAX_AGE}`;
-  }
-  return `Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`;
-}
-
-function setSessionCookie(res: Response, sessionId: string, req: Request) {
-  res.setHeader("Set-Cookie", `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; ${sessionCookieAttributes(req)}`);
 }
 
 function authMiddleware(req: Request, _res: Response, next: NextFunction) {
@@ -88,7 +69,9 @@ function getZohoMailConfigured() {
 async function sendTwilioSms(toAddress: string, messageBody: string) {
   const cfg = getTwilioConfig();
   if (!cfg.isConfigured || !cfg.accountSid || !cfg.authToken) {
-    throw new Error("Twilio is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER or TWILIO_MESSAGING_SERVICE_SID.");
+    throw new Error(
+      "Twilio is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER or TWILIO_MESSAGING_SERVICE_SID.",
+    );
   }
 
   const params = new URLSearchParams({
@@ -133,25 +116,6 @@ function syncIntegrationStatuses() {
 export function registerTwilioMessagingOverrides(app: Express) {
   app.use(authMiddleware);
 
-  const pinLoginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 5,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many PIN login attempts. Please try again later." },
-  });
-
-  const pinLoginSchema = z.object({ pin: z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits") });
-  app.post("/api/auth/pin-login", pinLoginLimiter, (req, res) => {
-    const parsed = pinLoginSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Invalid PIN" });
-    const safeUser = storage.verifyPinLogin(parsed.data.pin);
-    if (!safeUser) return res.status(401).json({ error: "Invalid PIN" });
-    const session = storage.createSession(safeUser.id);
-    setSessionCookie(res, session.id, req);
-    res.json({ user: safeUser });
-  });
-
   app.get("/api/integrations", requireAdmin, (_req, res) => {
     syncIntegrationStatuses();
     res.json(storage.getAllIntegrationSettings());
@@ -159,7 +123,9 @@ export function registerTwilioMessagingOverrides(app: Express) {
 
   app.post("/api/messaging/send", requireAuth, async (req, res) => {
     const currentUser = (req as any).currentUser;
-    if (currentUser.role === "mechanic") return res.status(403).json({ error: "Insufficient permissions" });
+    if (currentUser.role === "mechanic") {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
 
     const schema = z.object({
       jobId: z.number().optional(),
@@ -239,7 +205,8 @@ export function registerTwilioMessagingOverrides(app: Express) {
       return res.status(502).json({
         error: error?.message || "Message send failed",
         log: failed,
-        connectorAvailable: parsed.data.channel === "sms" ? getTwilioConfig().isConfigured : getZohoMailConfigured(),
+        connectorAvailable:
+          parsed.data.channel === "sms" ? getTwilioConfig().isConfigured : getZohoMailConfigured(),
       });
     }
   });
