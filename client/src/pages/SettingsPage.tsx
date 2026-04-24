@@ -16,7 +16,6 @@ import { Save, Settings, MapPin, Phone, Clock, Plug, CheckCircle2, Info, Refresh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 
-// ── Integration service metadata ──────────────────────────────────────────────
 const INTEGRATION_META: Record<string, {
   label: string;
   description: string;
@@ -45,11 +44,10 @@ const INTEGRATION_META: Record<string, {
     label: "Twilio SMS",
     description: "Send SMS notifications for estimates, job scheduling, and payment link delivery.",
     color: "text-red-500 dark:text-red-400",
-    setupNote: "Contact your admin to set the TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables.",
+    setupNote: "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and either TWILIO_FROM_NUMBER or TWILIO_MESSAGING_SERVICE_SID on the server.",
   },
 };
 
-// ── Integration Card ──────────────────────────────────────────────────────────
 function IntegrationCard({ setting }: { setting: IntegrationSettings }) {
   const { toast } = useToast();
   const meta = INTEGRATION_META[setting.service];
@@ -98,7 +96,6 @@ function IntegrationCard({ setting }: { setting: IntegrationSettings }) {
           </div>
         </div>
 
-        {/* Setup note — only shown when not connected */}
         {!isConnected && (
           <div className="flex gap-2 bg-muted/60 border border-border rounded px-3 py-2 text-xs text-muted-foreground">
             <Info size={12} className="shrink-0 mt-0.5 text-zinc-400" />
@@ -106,7 +103,6 @@ function IntegrationCard({ setting }: { setting: IntegrationSettings }) {
           </div>
         )}
 
-        {/* Config fields — always available for note-keeping even before live connection */}
         <div className="space-y-2">
           <div>
             <Label className="text-xs">Account / Org Label</Label>
@@ -130,7 +126,6 @@ function IntegrationCard({ setting }: { setting: IntegrationSettings }) {
           </div>
         </div>
 
-        {/* Sync toggles */}
         {(setting.service === "zoho_crm" || setting.service === "zoho_books") && (
           <div className="grid grid-cols-3 gap-3 pt-1 border-t border-border">
             <div className="flex items-center gap-2">
@@ -188,7 +183,6 @@ function IntegrationCard({ setting }: { setting: IntegrationSettings }) {
   );
 }
 
-// ── Business Profile Tab ──────────────────────────────────────────────────────
 function BusinessProfileTab() {
   const { toast } = useToast();
   const { data: profile, isLoading } = useQuery<BusinessProfile>({
@@ -345,7 +339,6 @@ function BusinessProfileTab() {
   );
 }
 
-// ── Integrations Tab ──────────────────────────────────────────────────────────
 function IntegrationsTab() {
   const { data: integrations = [], isLoading } = useQuery<IntegrationSettings[]>({
     queryKey: ["/api/integrations"],
@@ -359,13 +352,11 @@ function IntegrationsTab() {
     );
   }
 
-  // Ensure display order
   const order = ["zoho_crm", "zoho_books", "zoho_mail", "twilio"];
   const sorted = [...integrations].sort((a, b) => order.indexOf(a.service) - order.indexOf(b.service));
 
   return (
     <div className="space-y-4">
-      {/* Honest status banner */}
       <Alert className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
         <Info size={14} className="text-blue-600 dark:text-blue-400" />
         <AlertDescription className="text-xs text-blue-700 dark:text-blue-300">
@@ -398,7 +389,6 @@ function IntegrationsTab() {
   );
 }
 
-// ── Settings Page ─────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   return (
     <div className="p-5 max-w-3xl mx-auto space-y-5">
